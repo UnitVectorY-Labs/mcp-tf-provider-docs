@@ -13,6 +13,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/adrg/frontmatter"
 )
 
 // Config holds settings loaded from the YAML file.
@@ -162,8 +164,29 @@ func handleLookup(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolRe
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("error reading '%s': %v", p, err)), nil
 		}
-		builder.Write(contentBytes)
+
+		// The Markdown files may contan front matter, since this is not valuable to the MCP tool, we strip it out
+		content, err := StripFrontMatterWithLib(string(contentBytes))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("error stripping front matter from '%s': %v", p, err)), nil
+		}
+
+		builder.WriteString(content)
 		builder.WriteString("\n\n---\n\n")
 	}
 	return mcp.NewToolResultText(builder.String()), nil
+}
+
+func StripFrontMatterWithLib(content string) (string, error) {
+	// Use an empty struct since we don't need to capture metadata
+	var meta struct{}
+	rest, err := frontmatter.Parse(strings.NewReader(content), &meta)
+	if err != nil {
+		// No front matter? frontmatter.ErrNotFound is returned ➝ just return original
+		if err == frontmatter.ErrNotFound {
+			return content, nil
+		}
+		return "", err
+	}
+	return string(rest), nil
 }

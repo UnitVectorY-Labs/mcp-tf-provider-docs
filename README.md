@@ -6,7 +6,7 @@ A configurable MCP server that indexes and serves Terraform/Tofu provider docume
 
 ## Purpose
 
-`mcp-tf-provider-docs` is designed to provide an MCP server that can provide access to Terraform resources. This requires checking out the corresponding Terraform Git repository such as[hashicorp/terraform-provider-google](https://github.com/hashicorp/terraform-provider-google) which will be used as an example in this documentation.  However, this MCP server is generic and can be configured to work with other Terraform providers as well.  The MCP tool provided allows your Agent to look up the Terraform documentation which is useful in code generation as providers such as GCP regurally add and update their APIs and therefore it is common for attributes and features to not exist in the training data and therefore providing the most recent documentation can improve code generation.
+`mcp-tf-provider-docs` is designed to provide an MCP server that can provide access to Terraform resources. This requires checking out the corresponding Terraform Git repository such as [hashicorp/terraform-provider-google](https://github.com/hashicorp/terraform-provider-google) which will be used as an example in this documentation.  However, this MCP server is generic and can be configured to work with other Terraform providers as well.  The MCP tool provided allows your Agent to look up the Terraform documentation which is useful in code generation as providers such as GCP regurally add and update their APIs and therefore it is common for attributes and features to not exist in the training data and therefore providing the most recent documentation can improve code generation.
 
 ## Configuration
 
