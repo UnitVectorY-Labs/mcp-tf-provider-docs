@@ -27,6 +27,8 @@ type Config struct {
 // providerIndex maps a resource name to documentation file paths.
 var providerIndex = make(map[string][]string)
 
+var Version = "dev" // This will be set by the build systems to the release version
+
 func main() {
 
 	// Load config from YAML
@@ -62,7 +64,7 @@ func main() {
 	}
 
 	// Create the MCP server
-	srv := server.NewMCPServer("mcp-tf-provider-docs", "0.1.0")
+	srv := server.NewMCPServer("mcp-tf-provider-docs", Version)
 
 	// Register the lookup tool with description from config
 	tool := mcp.NewTool(
