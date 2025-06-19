@@ -8,6 +8,10 @@ A configurable MCP server that indexes and serves Terraform/Tofu provider docume
 
 `mcp-tf-provider-docs` is designed to provide an MCP server that can provide access to Terraform resources. This requires checking out the corresponding Terraform Git repository such as [hashicorp/terraform-provider-google](https://github.com/hashicorp/terraform-provider-google) which will be used as an example in this documentation.  However, this MCP server is generic and can be configured to work with other Terraform providers as well.  The MCP tool provided allows your Agent to look up the Terraform documentation which is useful in code generation as providers such as GCP regurally add and update their APIs and therefore it is common for attributes and features to not exist in the training data and therefore providing the most recent documentation can improve code generation.
 
+## Releases
+
+All official versions of **mcp-tf-provider-docs** are published on [GitHub Releases](https://github.com/UnitVectorY-Labs/mcp-tf-provider-docs/releases). Since this MCP server is written in Go, each release provides pre-compiled executables for macOS, Linux, and Windows—ready to download and run.
+
 ## Configuration
 
 The server is configured using environment variables and YAML files.
