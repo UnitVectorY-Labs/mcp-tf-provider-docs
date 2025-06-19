@@ -27,6 +27,7 @@ The following attributes can be specified in the file:
 
 - `docs_path`: The path to the root directory where documentation files live, typically a Git repository of the Terraform provider specifying the location of the documents folder, typically `/website/docs`. (required)
 - `match_pattern`: A regex pattern to extract fully-qualified resource or data source names from the documentation files. This pattern should match the prefix used by the Terraform provider. For example, for the Google Cloud Platform provider, the pattern would be `\\bgoogle_[a-z0-9_]+\\b`. (required)
+- `tool_name`: The name to use for the MCP tool. If not specified, defaults to `lookup_provider_docs`. This allows you to customize the tool name to match your use case or naming conventions. (optional)
 - `tool_description`: A description used by the MCP tool to provide context for the documentation, which can be helpful for users to understand what the tool does. (required)
 
 The configuration file is structured as follows:
@@ -38,8 +39,12 @@ docs_path: "/path-to/terraform-provider-google/website/docs"
 # Regex to extract fully-qualified resource or data source names, this looks for the prefix that is used by the Terraform provider
 match_pattern: "\\bgoogle_[a-z0-9_]+\\b"
 
+# (Optional) Name to use for the MCP tool. If omitted, defaults to 'lookup_provider_docs'.
+tool_name: "lookup_gcp_tf_docs"
+
 # Description used by the MCP tool to provide context for the documentation
 tool_description: "Lookup Terraform documentation for Google Cloud Platform based on the provider name."
+
 ```
 
 ## Limitations

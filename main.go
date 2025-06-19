@@ -22,6 +22,7 @@ type Config struct {
 	DocsPath        string `yaml:"docs_path"`
 	MatchPattern    string `yaml:"match_pattern"`
 	ToolDescription string `yaml:"tool_description"`
+	ToolName        string `yaml:"tool_name"`
 }
 
 // providerIndex maps a resource name to documentation file paths.
@@ -40,6 +41,12 @@ func main() {
 	cfg, err := loadConfig(configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Set default tool name if not provided
+	toolName := cfg.ToolName
+	if toolName == "" {
+		toolName = "lookup_provider_docs"
 	}
 
 	// Build the in-memory index
@@ -66,9 +73,9 @@ func main() {
 	// Create the MCP server
 	srv := server.NewMCPServer("mcp-tf-provider-docs", Version)
 
-	// Register the lookup tool with description from config
+	// Register the lookup tool with name and description from config
 	tool := mcp.NewTool(
-		"lookupProviderDocs",
+		toolName,
 		mcp.WithDescription(cfg.ToolDescription),
 		mcp.WithString(
 			"provider_name",
