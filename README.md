@@ -12,7 +12,7 @@ A configurable MCP server that indexes and serves Terraform/Tofu provider docume
 
 All official versions of **mcp-tf-provider-docs** are published on [GitHub Releases](https://github.com/UnitVectorY-Labs/mcp-tf-provider-docs/releases). Since this MCP server is written in Go, each release provides pre-compiled executables for macOS, Linux, and Windows—ready to download and run.
 
-Alternatively, if you have Go installed, you can install mcp-tf-provider-docs directly from source using the following command:
+Alternatively, if you have Go installed, you can install **mcp-tf-provider-docs** directly from source using the following command:
 
 ```bash
 go install github.com/UnitVectorY-Labs/mcp-tf-provider-docs@latest
