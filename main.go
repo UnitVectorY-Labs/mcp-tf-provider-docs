@@ -77,6 +77,7 @@ func main() {
 	tool := mcp.NewTool(
 		toolName,
 		mcp.WithDescription(cfg.ToolDescription),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString(
 			"provider_name",
 			mcp.Description("Fully qualified Terraform/Tofu resource or data source name (e.g., google_compute_instance)."),
