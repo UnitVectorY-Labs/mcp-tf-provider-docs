@@ -4,7 +4,7 @@ go 1.25.3 // GOVERSION
 
 require (
 	github.com/adrg/frontmatter v0.2.0
-	github.com/mark3labs/mcp-go v0.41.1
+	github.com/mark3labs/mcp-go v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
