@@ -1,6 +1,6 @@
 module github.com/UnitVectorY-Labs/mcp-tf-provider-docs
 
-go 1.25.5 // GOVERSION
+go 1.25.6 // GOVERSION
 
 require (
 	github.com/adrg/frontmatter v0.2.0
