@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -31,6 +32,14 @@ var providerIndex = make(map[string][]string)
 var Version = "dev" // This will be set by the build systems to the release version
 
 func main() {
+	// Set the build version from the build info if not set by the build system
+	if Version == "dev" || Version == "" {
+		if bi, ok := debug.ReadBuildInfo(); ok {
+			if bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+				Version = bi.Main.Version
+			}
+		}
+	}
 
 	// Load config from YAML
 	configPath := os.Getenv("TF_CONFIG")
