@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"strings"
 
@@ -31,6 +32,16 @@ var providerIndex = make(map[string][]string)
 
 var Version = "dev" // This will be set by the build systems to the release version
 
+var semverRe = regexp.MustCompile(`^\d+\.\d+\.\d+`)
+
+func buildVersionOutput(version string) string {
+	normalized := version
+	if semverRe.MatchString(normalized) && !strings.HasPrefix(normalized, "v") {
+		normalized = "v" + normalized
+	}
+	return fmt.Sprintf("%s (%s, %s/%s)", normalized, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+}
+
 func main() {
 	// Set the build version from the build info if not set by the build system
 	if Version == "dev" || Version == "" {
@@ -39,6 +50,12 @@ func main() {
 				Version = bi.Main.Version
 			}
 		}
+	}
+
+	// Handle --version flag
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		fmt.Printf("mcp-tf-provider-docs version %s\n", buildVersionOutput(Version))
+		os.Exit(0)
 	}
 
 	// Load config from YAML
