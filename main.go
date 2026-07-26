@@ -110,6 +110,9 @@ func main() {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        toolName,
 		Description: cfg.ToolDescription,
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint: true,
+		},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input LookupProviderDocsInput) (
 		*mcp.CallToolResult, LookupProviderDocsOutput, error,
 	) {
