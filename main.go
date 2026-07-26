@@ -13,8 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/adrg/frontmatter"
 )
@@ -40,6 +39,14 @@ func buildVersionOutput(version string) string {
 		normalized = "v" + normalized
 	}
 	return fmt.Sprintf("%s (%s, %s/%s)", normalized, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+}
+
+type LookupProviderDocsInput struct {
+	ProviderName string `json:"provider_name" jsonschema:"Fully qualified Terraform/Tofu resource or data source name (e.g., google_compute_instance)."`
+}
+
+type LookupProviderDocsOutput struct {
+	Content string `json:"content" jsonschema:"the documentation content"`
 }
 
 func main() {
@@ -97,22 +104,51 @@ func main() {
 	}
 
 	// Create the MCP server
-	srv := server.NewMCPServer("mcp-tf-provider-docs", Version)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "mcp-tf-provider-docs", Version: Version}, nil)
 
 	// Register the lookup tool with name and description from config
-	tool := mcp.NewTool(
-		toolName,
-		mcp.WithDescription(cfg.ToolDescription),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithString(
-			"provider_name",
-			mcp.Description("Fully qualified Terraform/Tofu resource or data source name (e.g., google_compute_instance)."),
-			mcp.Required(),
-		),
-	)
-	srv.AddTool(tool, handleLookup)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        toolName,
+		Description: cfg.ToolDescription,
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input LookupProviderDocsInput) (
+		*mcp.CallToolResult, LookupProviderDocsOutput, error,
+	) {
+		pname := input.ProviderName
 
-	if err := server.ServeStdio(srv); err != nil {
+		paths, found := providerIndex[pname]
+		if !found || len(paths) == 0 {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("no docs found for '%s'", pname)}},
+				IsError: true,
+			}, LookupProviderDocsOutput{}, nil
+		}
+
+		var builder strings.Builder
+		for _, p := range paths {
+			contentBytes, err := os.ReadFile(p)
+			if err != nil {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error reading '%s': %v", p, err)}},
+					IsError: true,
+				}, LookupProviderDocsOutput{}, nil
+			}
+
+			// The Markdown files may contain front matter, since this is not valuable to the MCP tool, we strip it out
+			content, err := StripFrontMatterWithLib(string(contentBytes))
+			if err != nil {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error stripping front matter from '%s': %v", p, err)}},
+					IsError: true,
+				}, LookupProviderDocsOutput{}, nil
+			}
+
+			builder.WriteString(content)
+			builder.WriteString("\n\n---\n\n")
+		}
+		return nil, LookupProviderDocsOutput{Content: builder.String()}, nil
+	})
+
+	if err := srv.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Fatalf("MCP server terminated: %v", err)
 	}
 }
@@ -178,39 +214,6 @@ func buildIndex(cfg *Config) error {
 // compileRegex compiles a string into a regexp.Regexp, returning an error if invalid.
 func compileRegex(expr string) (*regexp.Regexp, error) {
 	return regexp.Compile(expr)
-}
-
-// handleLookup is the MCP tool handler that returns docs for a given provider name.
-func handleLookup(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-
-	args := req.GetArguments()
-	pname, ok := args["provider_name"].(string)
-	if !ok {
-		return mcp.NewToolResultError("invalid or missing 'provider_name' parameter"), nil
-	}
-
-	paths, found := providerIndex[pname]
-	if !found || len(paths) == 0 {
-		return mcp.NewToolResultError(fmt.Sprintf("no docs found for '%s'", pname)), nil
-	}
-
-	var builder strings.Builder
-	for _, p := range paths {
-		contentBytes, err := os.ReadFile(p)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("error reading '%s': %v", p, err)), nil
-		}
-
-		// The Markdown files may contan front matter, since this is not valuable to the MCP tool, we strip it out
-		content, err := StripFrontMatterWithLib(string(contentBytes))
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("error stripping front matter from '%s': %v", p, err)), nil
-		}
-
-		builder.WriteString(content)
-		builder.WriteString("\n\n---\n\n")
-	}
-	return mcp.NewToolResultText(builder.String()), nil
 }
 
 func StripFrontMatterWithLib(content string) (string, error) {
