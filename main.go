@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -59,6 +61,9 @@ func main() {
 		os.Exit(0)
 	}
 
+	httpAddr := flag.String("http", "", "if set, serve over SSE/HTTP at this address (e.g. :8080); defaults to STDIO")
+	flag.Parse()
+
 	// Load config from YAML
 	configPath := os.Getenv("TF_CONFIG")
 	if configPath == "" {
@@ -105,9 +110,7 @@ func main() {
 		Name:        toolName,
 		Description: cfg.ToolDescription,
 		Annotations: &mcp.ToolAnnotations{
-			ReadOnlyHint:    true,
-			DestructiveHint: new(true),
-			OpenWorldHint:   new(true),
+			ReadOnlyHint: true,
 		},
 		InputSchema: &jsonschema.Schema{
 			Type: "object",
@@ -170,8 +173,18 @@ func main() {
 		}, nil
 	})
 
-	if err := srv.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
-		log.Fatalf("MCP server terminated: %v", err)
+	if *httpAddr != "" {
+		handler := mcp.NewSSEHandler(func(*http.Request) *mcp.Server {
+			return srv
+		}, nil)
+		log.Printf("Starting SSE/HTTP server at %s", *httpAddr)
+		if err := http.ListenAndServe(*httpAddr, handler); err != nil {
+			log.Fatalf("HTTP server failed: %v", err)
+		}
+	} else {
+		if err := srv.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+			log.Fatalf("MCP server terminated: %v", err)
+		}
 	}
 }
 
