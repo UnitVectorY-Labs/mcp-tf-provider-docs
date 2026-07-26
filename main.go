@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/adrg/frontmatter"
@@ -39,14 +41,6 @@ func buildVersionOutput(version string) string {
 		normalized = "v" + normalized
 	}
 	return fmt.Sprintf("%s (%s, %s/%s)", normalized, runtime.Version(), runtime.GOOS, runtime.GOARCH)
-}
-
-type LookupProviderDocsInput struct {
-	ProviderName string `json:"provider_name" jsonschema:"Fully qualified Terraform/Tofu resource or data source name (e.g., google_compute_instance)."`
-}
-
-type LookupProviderDocsOutput struct {
-	Content string `json:"content" jsonschema:"the documentation content"`
 }
 
 func main() {
@@ -107,23 +101,46 @@ func main() {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "mcp-tf-provider-docs", Version: Version}, nil)
 
 	// Register the lookup tool with name and description from config
-	mcp.AddTool(srv, &mcp.Tool{
+	srv.AddTool(&mcp.Tool{
 		Name:        toolName,
 		Description: cfg.ToolDescription,
 		Annotations: &mcp.ToolAnnotations{
-			ReadOnlyHint: true,
+			ReadOnlyHint:    true,
+			DestructiveHint: new(true),
+			OpenWorldHint:   new(true),
 		},
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input LookupProviderDocsInput) (
-		*mcp.CallToolResult, LookupProviderDocsOutput, error,
-	) {
-		pname := input.ProviderName
+		InputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"provider_name": {
+					Type:        "string",
+					Description: "Fully qualified Terraform/Tofu resource or data source name (e.g., google_compute_instance).",
+				},
+			},
+			Required: []string{"provider_name"},
+		},
+	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args map[string]any
+		if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("invalid arguments: %v", err)}},
+				IsError: true,
+			}, nil
+		}
+		pname, ok := args["provider_name"].(string)
+		if !ok {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: "invalid or missing 'provider_name' parameter"}},
+				IsError: true,
+			}, nil
+		}
 
 		paths, found := providerIndex[pname]
 		if !found || len(paths) == 0 {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("no docs found for '%s'", pname)}},
 				IsError: true,
-			}, LookupProviderDocsOutput{}, nil
+			}, nil
 		}
 
 		var builder strings.Builder
@@ -133,7 +150,7 @@ func main() {
 				return &mcp.CallToolResult{
 					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error reading '%s': %v", p, err)}},
 					IsError: true,
-				}, LookupProviderDocsOutput{}, nil
+				}, nil
 			}
 
 			// The Markdown files may contain front matter, since this is not valuable to the MCP tool, we strip it out
@@ -142,13 +159,15 @@ func main() {
 				return &mcp.CallToolResult{
 					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error stripping front matter from '%s': %v", p, err)}},
 					IsError: true,
-				}, LookupProviderDocsOutput{}, nil
+				}, nil
 			}
 
 			builder.WriteString(content)
 			builder.WriteString("\n\n---\n\n")
 		}
-		return nil, LookupProviderDocsOutput{Content: builder.String()}, nil
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: builder.String()}},
+		}, nil
 	})
 
 	if err := srv.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
