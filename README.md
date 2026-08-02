@@ -25,6 +25,10 @@ The server is configured using environment variables and YAML files.
 ### Environment Variables
 - `TF_CONFIG`: The path to the configuration YAML file. (required)
 
+### Command-line Flags
+
+- `--http=<addr>`: Start the server in SSE/HTTP mode at the given address (e.g. `--http=:8080`). If omitted, the server runs over STDIO (default).
+
 ### YAML Configuration File
 
 The configuration file is used to specify the configuration for the MCP server allowing it to be customized for different Terraform providers.

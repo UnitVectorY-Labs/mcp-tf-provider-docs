@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,8 +16,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/adrg/frontmatter"
 )
@@ -58,6 +61,9 @@ func main() {
 		os.Exit(0)
 	}
 
+	httpAddr := flag.String("http", "", "if set, serve over SSE/HTTP at this address (e.g. :8080); defaults to STDIO")
+	flag.Parse()
+
 	// Load config from YAML
 	configPath := os.Getenv("TF_CONFIG")
 	if configPath == "" {
@@ -97,23 +103,88 @@ func main() {
 	}
 
 	// Create the MCP server
-	srv := server.NewMCPServer("mcp-tf-provider-docs", Version)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "mcp-tf-provider-docs", Version: Version}, nil)
 
 	// Register the lookup tool with name and description from config
-	tool := mcp.NewTool(
-		toolName,
-		mcp.WithDescription(cfg.ToolDescription),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithString(
-			"provider_name",
-			mcp.Description("Fully qualified Terraform/Tofu resource or data source name (e.g., google_compute_instance)."),
-			mcp.Required(),
-		),
-	)
-	srv.AddTool(tool, handleLookup)
+	srv.AddTool(&mcp.Tool{
+		Name:        toolName,
+		Description: cfg.ToolDescription,
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint: true,
+		},
+		InputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"provider_name": {
+					Type:        "string",
+					Description: "Fully qualified Terraform/Tofu resource or data source name (e.g., google_compute_instance).",
+				},
+			},
+			Required: []string{"provider_name"},
+		},
+	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args map[string]any
+		if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("invalid arguments: %v", err)}},
+				IsError: true,
+			}, nil
+		}
+		pname, ok := args["provider_name"].(string)
+		if !ok {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: "invalid or missing 'provider_name' parameter"}},
+				IsError: true,
+			}, nil
+		}
 
-	if err := server.ServeStdio(srv); err != nil {
-		log.Fatalf("MCP server terminated: %v", err)
+		paths, found := providerIndex[pname]
+		if !found || len(paths) == 0 {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("no docs found for '%s'", pname)}},
+				IsError: true,
+			}, nil
+		}
+
+		var builder strings.Builder
+		for _, p := range paths {
+			contentBytes, err := os.ReadFile(p)
+			if err != nil {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error reading '%s': %v", p, err)}},
+					IsError: true,
+				}, nil
+			}
+
+			// The Markdown files may contain front matter, since this is not valuable to the MCP tool, we strip it out
+			content, err := StripFrontMatterWithLib(string(contentBytes))
+			if err != nil {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error stripping front matter from '%s': %v", p, err)}},
+					IsError: true,
+				}, nil
+			}
+
+			builder.WriteString(content)
+			builder.WriteString("\n\n---\n\n")
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: builder.String()}},
+		}, nil
+	})
+
+	if *httpAddr != "" {
+		handler := mcp.NewSSEHandler(func(*http.Request) *mcp.Server {
+			return srv
+		}, nil)
+		log.Printf("Starting SSE/HTTP server at %s", *httpAddr)
+		if err := http.ListenAndServe(*httpAddr, handler); err != nil {
+			log.Fatalf("HTTP server failed: %v", err)
+		}
+	} else {
+		if err := srv.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+			log.Fatalf("MCP server terminated: %v", err)
+		}
 	}
 }
 
@@ -178,39 +249,6 @@ func buildIndex(cfg *Config) error {
 // compileRegex compiles a string into a regexp.Regexp, returning an error if invalid.
 func compileRegex(expr string) (*regexp.Regexp, error) {
 	return regexp.Compile(expr)
-}
-
-// handleLookup is the MCP tool handler that returns docs for a given provider name.
-func handleLookup(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-
-	args := req.GetArguments()
-	pname, ok := args["provider_name"].(string)
-	if !ok {
-		return mcp.NewToolResultError("invalid or missing 'provider_name' parameter"), nil
-	}
-
-	paths, found := providerIndex[pname]
-	if !found || len(paths) == 0 {
-		return mcp.NewToolResultError(fmt.Sprintf("no docs found for '%s'", pname)), nil
-	}
-
-	var builder strings.Builder
-	for _, p := range paths {
-		contentBytes, err := os.ReadFile(p)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("error reading '%s': %v", p, err)), nil
-		}
-
-		// The Markdown files may contan front matter, since this is not valuable to the MCP tool, we strip it out
-		content, err := StripFrontMatterWithLib(string(contentBytes))
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("error stripping front matter from '%s': %v", p, err)), nil
-		}
-
-		builder.WriteString(content)
-		builder.WriteString("\n\n---\n\n")
-	}
-	return mcp.NewToolResultText(builder.String()), nil
 }
 
 func StripFrontMatterWithLib(content string) (string, error) {
