@@ -5,7 +5,7 @@ go 1.27.0 // GOVERSION
 require (
 	github.com/adrg/frontmatter v0.2.0
 	github.com/google/jsonschema-go v0.4.3
-	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
