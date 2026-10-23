@@ -1,6 +1,7 @@
 name: mcp-tf-provider-docs
 default_branch: main
 config:
+  osv: sarif
   description: "A configurable MCP server that indexes and serves Terraform/Tofu provider documentation from a local Git repo to power accurate, context-aware code generation."
   license: MIT
   language: go
