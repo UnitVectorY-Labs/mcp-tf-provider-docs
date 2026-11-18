@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"log"
@@ -122,56 +122,7 @@ func main() {
 			},
 			Required: []string{"provider_name"},
 		},
-	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		var args map[string]any
-		if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("invalid arguments: %v", err)}},
-				IsError: true,
-			}, nil
-		}
-		pname, ok := args["provider_name"].(string)
-		if !ok {
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{&mcp.TextContent{Text: "invalid or missing 'provider_name' parameter"}},
-				IsError: true,
-			}, nil
-		}
-
-		paths, found := providerIndex[pname]
-		if !found || len(paths) == 0 {
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("no docs found for '%s'", pname)}},
-				IsError: true,
-			}, nil
-		}
-
-		var builder strings.Builder
-		for _, p := range paths {
-			contentBytes, err := os.ReadFile(p)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error reading '%s': %v", p, err)}},
-					IsError: true,
-				}, nil
-			}
-
-			// The Markdown files may contain front matter, since this is not valuable to the MCP tool, we strip it out
-			content, err := StripFrontMatterWithLib(string(contentBytes))
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error stripping front matter from '%s': %v", p, err)}},
-					IsError: true,
-				}, nil
-			}
-
-			builder.WriteString(content)
-			builder.WriteString("\n\n---\n\n")
-		}
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: builder.String()}},
-		}, nil
-	})
+	}, lookupProviderDocs)
 
 	if *httpAddr != "" {
 		handler := mcp.NewSSEHandler(func(*http.Request) *mcp.Server {
@@ -186,6 +137,57 @@ func main() {
 			log.Fatalf("MCP server terminated: %v", err)
 		}
 	}
+}
+
+func lookupProviderDocs(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	var args map[string]any
+	if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("invalid arguments: %v", err)}},
+			IsError: true,
+		}, nil
+	}
+	pname, ok := args["provider_name"].(string)
+	if !ok {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "invalid or missing 'provider_name' parameter"}},
+			IsError: true,
+		}, nil
+	}
+
+	paths, found := providerIndex[pname]
+	if !found || len(paths) == 0 {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("no docs found for '%s'", pname)}},
+			IsError: true,
+		}, nil
+	}
+
+	var builder strings.Builder
+	for _, p := range paths {
+		contentBytes, err := os.ReadFile(p)
+		if err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error reading '%s': %v", p, err)}},
+				IsError: true,
+			}, nil
+		}
+
+		// The Markdown files may contain front matter, since this is not valuable to the MCP tool, we strip it out
+		content, err := StripFrontMatterWithLib(string(contentBytes))
+		if err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error stripping front matter from '%s': %v", p, err)}},
+				IsError: true,
+			}, nil
+		}
+
+		builder.WriteString(content)
+		builder.WriteString("\n\n---\n\n")
+	}
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: builder.String()}},
+	}, nil
 }
 
 // loadConfig reads and parses the YAML configuration file.
