@@ -174,10 +174,10 @@ func main() {
 	})
 
 	if *httpAddr != "" {
-		handler := mcp.NewSSEHandler(func(*http.Request) *mcp.Server {
+		handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 			return srv
-		}, nil)
-		log.Printf("Starting SSE/HTTP server at %s", *httpAddr)
+		}, &mcp.StreamableHTTPOptions{Stateless: true})
+		log.Printf("Starting Streamable HTTP server at %s", *httpAddr)
 		if err := http.ListenAndServe(*httpAddr, handler); err != nil {
 			log.Fatalf("HTTP server failed: %v", err)
 		}
